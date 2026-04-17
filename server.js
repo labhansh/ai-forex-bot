@@ -116,9 +116,22 @@ app.post("/webhook", async (req, res) => {
         } else if (data.event === "ENTRY") {
             console.log("Free limit reached");
 
-            await sendMessage(FREE_CHAT_ID,
-                "🚫 Free limit reached today.\nUpgrade to VIP for unlimited signals."
-            );
+            await sendMessage(FREE_CHAT_ID, `
+			🚫 <b>FREE LIMIT REACHED</b>
+
+			You’ve used today’s 2 signals.
+
+			🔥 <b>Unlock VIP Benefits:</b>
+			✔ Unlimited signals  
+			✔ High accuracy setups  
+			✔ Early entries  
+			✔ Full TP tracking  
+
+			💰 <b>Join VIP Now:</b>
+			👉 https://your-payment-link.com
+
+			⚡ Don’t miss the next winning trade!
+`			);
         }
 
         res.send("OK");
@@ -139,3 +152,23 @@ app.get("/signals", (req, res) => {
 app.listen(3000, () => {
     console.log("Server running on port 3000");
 });
+
+setInterval(async () => {
+    const message = `
+🔥 <b>AI FOREX PRO VIP</b>
+
+Want consistent profits?
+
+📊 Win-rate optimized signals  
+🎯 TP1 / TP2 / TP3 tracking  
+⚡ Instant alerts  
+
+💰 Join VIP:
+👉 https://your-payment-link.com
+
+Limited spots available!
+`;
+
+    await sendMessage(FREE_CHAT_ID, message);
+
+}, 24 * 60 * 60 * 1000); // every 24 hrs
