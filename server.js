@@ -30,22 +30,26 @@ async function sendMessage(chatId, text) {
     });
 }
 
-// ===== FORMAT MESSAGE =====
+// ===== PREMIUM FORMAT MESSAGE =====
 function formatMessage(data) {
     return `
 🚀 <b>AI FOREX PRO VIP SIGNAL</b>
 
-📊 ${data.pair}
-📈 ${data.type}
+📊 <b>Pair:</b> ${data.pair}  
+📈 <b>Type:</b> ${data.type}  
 
-💰 Entry: ${data.entry}
-🛑 SL: ${data.sl}
+💰 <b>Entry:</b> ${data.entry}  
+🛑 <b>Stop Loss:</b> ${data.sl}  
 
-🎯 TP1: ${data.tp1}
-🎯 TP2: ${data.tp2}
-🎯 TP3: ${data.tp3}
+🎯 <b>Targets:</b>  
+TP1 → ${data.tp1}  
+TP2 → ${data.tp2}  
+TP3 → ${data.tp3}  
 
-🆔 ${data.id}
+⚡ <b>Risk:</b> Medium  
+⏱ <b>Timeframe:</b> ${data.timeframe || "1m"}  
+
+🆔 <code>${data.id}</code>
 `;
 }
 
@@ -58,31 +62,45 @@ function checkTPHits(signal, price) {
         if (!signal.tp1Hit && price >= signal.tp1) {
             signal.tp1Hit = true;
             signal.trailSL = signal.entry;
-            signal.partial1Done = true;
-
-            updates.push("TP1 HIT");
-            updates.push("🔒 SL moved to Entry");
+            updates.push("🎯 <b>TP1 HIT</b>\n🔒 SL moved to Entry");
         }
 
         if (!signal.tp2Hit && price >= signal.tp2) {
             signal.tp2Hit = true;
             signal.trailSL = signal.tp1;
-            signal.partial2Done = true;
-
-            updates.push("TP2 HIT");
-            updates.push("🔒 SL moved to TP1");
+            updates.push("🎯 <b>TP2 HIT</b>\n🔒 SL moved to TP1");
         }
 
         if (!signal.tp3Hit && price >= signal.tp3) {
             signal.tp3Hit = true;
             signal.status = "CLOSED";
 
-            updates.push("🏆 TP3 HIT (TRADE CLOSED)");
+            updates.push(`
+🏆 <b>TRADE CLOSED IN PROFIT</b>
+
+📊 ${signal.pair}
+📈 ${signal.type}
+
+💰 Entry: ${signal.entry}
+🎯 TP3 HIT
+
+🔥 <b>Another Winning Trade</b>
+`);
         }
 
         if (price <= (signal.trailSL || signal.sl) && signal.status !== "CLOSED") {
             signal.status = "CLOSED";
-            updates.push("❌ TRAIL SL HIT");
+
+            updates.push(`
+❌ <b>TRADE CLOSED</b>
+
+📊 ${signal.pair}
+📉 ${signal.type}
+
+🛑 Stop Loss Hit
+
+⚠️ Risk Managed Trade
+`);
         }
     }
 
@@ -91,31 +109,45 @@ function checkTPHits(signal, price) {
         if (!signal.tp1Hit && price <= signal.tp1) {
             signal.tp1Hit = true;
             signal.trailSL = signal.entry;
-            signal.partial1Done = true;
-
-            updates.push("TP1 HIT");
-            updates.push("🔒 SL moved to Entry");
+            updates.push("🎯 <b>TP1 HIT</b>\n🔒 SL moved to Entry");
         }
 
         if (!signal.tp2Hit && price <= signal.tp2) {
             signal.tp2Hit = true;
             signal.trailSL = signal.tp1;
-            signal.partial2Done = true;
-
-            updates.push("TP2 HIT");
-            updates.push("🔒 SL moved to TP1");
+            updates.push("🎯 <b>TP2 HIT</b>\n🔒 SL moved to TP1");
         }
 
         if (!signal.tp3Hit && price <= signal.tp3) {
             signal.tp3Hit = true;
             signal.status = "CLOSED";
 
-            updates.push("🏆 TP3 HIT (TRADE CLOSED)");
+            updates.push(`
+🏆 <b>TRADE CLOSED IN PROFIT</b>
+
+📊 ${signal.pair}
+📈 ${signal.type}
+
+💰 Entry: ${signal.entry}
+🎯 TP3 HIT
+
+🔥 <b>Another Winning Trade</b>
+`);
         }
 
         if (price >= (signal.trailSL || signal.sl) && signal.status !== "CLOSED") {
             signal.status = "CLOSED";
-            updates.push("❌ TRAIL SL HIT");
+
+            updates.push(`
+❌ <b>TRADE CLOSED</b>
+
+📊 ${signal.pair}
+📉 ${signal.type}
+
+🛑 Stop Loss Hit
+
+⚠️ Risk Managed Trade
+`);
         }
     }
 
@@ -158,7 +190,6 @@ app.post("/webhook", async (req, res) => {
                 tp2Hit: false,
                 tp3Hit: false,
 
-                // ✅ NEW FEATURES
                 trailSL: null,
                 partial1Done: false,
                 partial2Done: false,
@@ -171,21 +202,6 @@ app.post("/webhook", async (req, res) => {
 
             const message = formatMessage(signal);
             await sendMessage(VIP_CHAT_ID, message);
-
-            // FREE GROUP
-            const today = new Date().toDateString();
-            if (today !== currentDate) {
-                currentDate = today;
-                freeSignalsCount = 0;
-            }
-
-            if (freeSignalsCount < 2) {
-                setTimeout(() => {
-                    sendMessage(FREE_CHAT_ID, message);
-                }, 15 * 60 * 1000);
-
-                freeSignalsCount++;
-            }
 
             return res.send("ENTRY OK");
         }
@@ -214,12 +230,11 @@ setInterval(async () => {
         const hits = checkTPHits(signal, price);
 
         for (let hit of hits) {
-            await sendMessage(VIP_CHAT_ID, `
-${hit}
+            await sendMessage(VIP_CHAT_ID, hit + `
 
 📊 ${signal.pair}
 💰 Price: ${price}
-🆔 ${signal.id}
+🆔 <code>${signal.id}</code>
 `);
         }
     }
