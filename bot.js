@@ -205,9 +205,63 @@ bot.onText(/\/stats/, (msg) => {
 
     let users = JSON.parse(fs.readFileSync("users.json"));
 
-    bot.sendMessage(msg.chat.id, `
-📊 <b>AI Forex Pro Stats</b>
+    const now = new Date();
 
-👥 Total Users: ${users.length}
+    let active = 0;
+    let expired = 0;
+
+    let monthly = 0;
+    let bimonthly = 0;
+    let quarterly = 0;
+    let halfyearly = 0;
+    let yearly = 0;
+
+    let revenue = 0;
+
+    users.forEach(u => {
+        if (new Date(u.expiry) > now) {
+            active++;
+        } else {
+            expired++;
+        }
+
+        switch (u.plan) {
+            case "MONTHLY":
+                monthly++;
+                revenue += 4000;
+                break;
+            case "BIMONTHLY":
+                bimonthly++;
+                revenue += 6000;
+                break;
+            case "QUARTERLY":
+                quarterly++;
+                revenue += 8000;
+                break;
+            case "HALF YEARLY":
+                halfyearly++;
+                revenue += 12000;
+                break;
+            case "YEARLY":
+                yearly++;
+                revenue += 20000;
+                break;
+        }
+    });
+
+    bot.sendMessage(msg.chat.id, `
+📊 <b>AI Forex Pro Dashboard</b>
+
+👥 Total Users: ${users.length}  
+💰 Active Users: ${active}  
+❌ Expired Users: ${expired}  
+
+📦 Monthly: ${monthly}  
+📦 BiMonthly: ${bimonthly}  
+📦 Quarterly: ${quarterly}  
+📦 Half Yearly: ${halfyearly}  
+📦 Yearly: ${yearly}  
+
+💵 Estimated Revenue: ₹${revenue}
 `, { parse_mode: "HTML" });
 });
