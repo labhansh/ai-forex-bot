@@ -41,7 +41,11 @@ https://rzp.io/rzp/8021mrL9
 Yearly ₹20000  
 https://rzp.io/rzp/WVP9IjK
 
-👉 After payment send: PAID
+👉 After payment:
+1.Open telegram
+2.Search:@AlForextradePro_bot
+3.Send: PAID
+
 `);
 });
 
