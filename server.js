@@ -28,17 +28,19 @@ function formatMessage(data) {
 
 ━━━━━━━━━━━━━━━
 
-📊 <b>Pair:</b> ${data.pair}
-⏱ <b>Timeframe:</b> ${data.timeframe}m
+📊 <b>Pair:</b> ${data.pair || "-"}
+⏱ <b>Timeframe:</b> ${data.timeframe || "-"}
 
-📈 <b>Type:</b> ${data.type}
+📈 <b>Type:</b> ${data.type || "-"}
 
-💰 <b>Entry:</b> ${data.entry}
-🛑 <b>Stop Loss:</b> ${data.sl}
+💰 <b>Entry:</b> ${data.entry || "-"}
+🛑 <b>Stop Loss:</b> ${data.sl || "-"}
 
-🎯 <b>TP1:</b> ${data.tp1}
-🎯 <b>TP2:</b> ${data.tp2}
-🎯 <b>TP3:</b> ${data.tp3}
+🎯 <b>TP1:</b> ${data.tp1 || "-"}
+🎯 <b>TP2:</b> ${data.tp2 || "-"}
+🎯 <b>TP3:</b> ${data.tp3 || "-"}
+
+🆔 <b>ID:</b> ${data.id}
 
 ━━━━━━━━━━━━━━━
 ⚡ Powered by AI Forex Pro
@@ -59,15 +61,18 @@ app.post("/webhook", async (req, res) => {
     try {
         const data = req.body;
 
-        let message = "";
+        let signals = JSON.parse(fs.readFileSync(DB_FILE));
 
-        // ===== MESSAGE HANDLER =====
+        // =============================
+        // ===== ENTRY SIGNAL =====
+        // =============================
         if (data.event === "ENTRY") {
-            message = formatMessage(data);
 
-            // ===== SAVE ONLY ENTRY SIGNAL =====
+            // use TradingView ID (IMPORTANT)
+            const signalId = data.id;
+
             const signal = {
-                id: Date.now(),
+                id: signalId,
                 pair: data.pair,
                 type: data.type,
                 entry: data.entry,
@@ -75,66 +80,107 @@ app.post("/webhook", async (req, res) => {
                 tp1: data.tp1,
                 tp2: data.tp2,
                 tp3: data.tp3,
+                tp1Hit: false,
+                tp2Hit: false,
+                tp3Hit: false,
                 status: "OPEN",
                 createdAt: new Date()
             };
 
-            let signals = JSON.parse(fs.readFileSync(DB_FILE));
             signals.push(signal);
             fs.writeFileSync(DB_FILE, JSON.stringify(signals, null, 2));
+
+            const message = formatMessage(signal);
+
+            await sendMessage(VIP_CHAT_ID, message);
+
+            // ===== FREE LIMIT =====
+            const today = new Date().toDateString();
+            if (today !== currentDate) {
+                currentDate = today;
+                freeSignalsCount = 0;
+            }
+
+            if (freeSignalsCount < 2) {
+                setTimeout(() => {
+                    sendMessage(FREE_CHAT_ID, message);
+                }, 15 * 60 * 1000);
+
+                freeSignalsCount++;
+            }
+
+            return res.send("ENTRY OK");
         }
 
-        else if (data.event === "TP1") {
-            message = `🎯 TP1 HIT\n${data.pair}`;
-        }
-        else if (data.event === "TP2") {
-            message = `🎯 TP2 HIT\n${data.pair}`;
-        }
-        else if (data.event === "TP3") {
-            message = `🚀 TP3 HIT (FULL TARGET)\n${data.pair}`;
-        }
-        else if (data.event === "SL") {
-            message = `❌ STOP LOSS HIT\n${data.pair}`;
+        // =============================
+        // ===== FIND SIGNAL =====
+        // =============================
+        const signal = signals.find(s => s.id == data.id);
+
+        if (!signal) {
+            return res.send("Signal not found");
         }
 
-        // ===== SEND VIP =====
-        await sendMessage(VIP_CHAT_ID, message);
+        // =============================
+        // ===== TP1 =====
+        // =============================
+        if (data.event === "TP1" && !signal.tp1Hit) {
+            signal.tp1Hit = true;
 
-        // ===== FREE LIMIT LOGIC =====
-        const today = new Date().toDateString();
-        if (today !== currentDate) {
-            currentDate = today;
-            freeSignalsCount = 0;
+            await sendMessage(VIP_CHAT_ID, `
+🎯 <b>TP1 HIT</b>
+
+📊 ${signal.pair}
+🆔 ${signal.id}
+`);
         }
 
-        if (freeSignalsCount < 2 && data.event === "ENTRY") {
-            setTimeout(() => {
-                sendMessage(FREE_CHAT_ID, message);
-            }, 15 * 60 * 1000);
+        // =============================
+        // ===== TP2 =====
+        // =============================
+        if (data.event === "TP2" && !signal.tp2Hit) {
+            signal.tp2Hit = true;
 
-            freeSignalsCount++;
-        } else if (data.event === "ENTRY") {
-            console.log("Free limit reached");
+            await sendMessage(VIP_CHAT_ID, `
+🎯 <b>TP2 HIT</b>
 
-            await sendMessage(FREE_CHAT_ID, `
-			🚫 <b>FREE LIMIT REACHED</b>
-
-			You’ve used today’s 2 signals.
-
-			🔥 <b>Unlock VIP Benefits:</b>
-			✔ Unlimited signals  
-			✔ High accuracy setups  
-			✔ Early entries  
-			✔ Full TP tracking  
-
-			💰 <b>Join VIP Now:</b>
-			👉 https://your-payment-link.com
-
-			⚡ Don’t miss the next winning trade!
-`			);
+📊 ${signal.pair}
+🆔 ${signal.id}
+`);
         }
 
-        res.send("OK");
+        // =============================
+        // ===== TP3 =====
+        // =============================
+        if (data.event === "TP3" && !signal.tp3Hit) {
+            signal.tp3Hit = true;
+            signal.status = "CLOSED";
+
+            await sendMessage(VIP_CHAT_ID, `
+🏆 <b>TP3 HIT - TRADE CLOSED</b>
+
+📊 ${signal.pair}
+🆔 ${signal.id}
+`);
+        }
+
+        // =============================
+        // ===== SL =====
+        // =============================
+        if (data.event === "SL" && signal.status !== "CLOSED") {
+            signal.status = "CLOSED";
+
+            await sendMessage(VIP_CHAT_ID, `
+❌ <b>STOP LOSS HIT</b>
+
+📊 ${signal.pair}
+🆔 ${signal.id}
+`);
+        }
+
+        fs.writeFileSync(DB_FILE, JSON.stringify(signals, null, 2));
+
+        res.send("UPDATED");
 
     } catch (err) {
         console.log(err);
@@ -142,7 +188,7 @@ app.post("/webhook", async (req, res) => {
     }
 });
 
-// ===== HISTORY API =====
+// ===== HISTORY =====
 app.get("/signals", (req, res) => {
     const signals = JSON.parse(fs.readFileSync(DB_FILE));
     res.json(signals);
@@ -152,23 +198,3 @@ app.get("/signals", (req, res) => {
 app.listen(3000, () => {
     console.log("Server running on port 3000");
 });
-
-setInterval(async () => {
-    const message = `
-🔥 <b>AI FOREX PRO VIP</b>
-
-Want consistent profits?
-
-📊 Win-rate optimized signals  
-🎯 TP1 / TP2 / TP3 tracking  
-⚡ Instant alerts  
-
-💰 Join VIP:
-👉 https://your-payment-link.com
-
-Limited spots available!
-`;
-
-    await sendMessage(FREE_CHAT_ID, message);
-
-}, 24 * 60 * 60 * 1000); // every 24 hrs
