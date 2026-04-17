@@ -5,26 +5,31 @@ const app = express();
 app.use(express.json());
 
 // ===== CONFIG =====
-const BOT_TOKEN = "8364091364:AAFkaIhar-d1-kmyc7ao2d49HBITmjGCoOc";
-const VIP_CHAT_ID = "-1003710328560";
-const FREE_CHAT_ID = "-1003910438629";
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const VIP_CHAT_ID = process.env.VIP_CHAT_ID;
+const FREE_CHAT_ID = process.env.FREE_CHAT_ID;
 
 // ===== FORMAT MESSAGE =====
 function formatMessage(data) {
     return `
-🚀 <b>AI FOREX PRO SIGNAL</b>
+🚀 <b>AI FOREX PRO VIP SIGNAL</b>
 
-📊 Pair: ${data.pair}
-⏱ Timeframe: ${data.timeframe}
+━━━━━━━━━━━━━━━
 
-📈 Type: <b>${data.type}</b>
+📊 <b>Pair:</b> ${data.pair}
+⏱ <b>Timeframe:</b> ${data.timeframe}m
 
-💰 Entry: ${data.entry}
-🛑 SL: ${data.sl}
+📈 <b>Type:</b> ${data.type}
 
-🎯 TP1: ${data.tp1}
-🎯 TP2: ${data.tp2}
-🎯 TP3: ${data.tp3}
+💰 <b>Entry:</b> ${data.entry}
+🛑 <b>Stop Loss:</b> ${data.sl}
+
+🎯 <b>TP1:</b> ${data.tp1}
+🎯 <b>TP2:</b> ${data.tp2}
+🎯 <b>TP3:</b> ${data.tp3}
+
+━━━━━━━━━━━━━━━
+⚡ Powered by AI Forex Pro
 `;
 }
 
