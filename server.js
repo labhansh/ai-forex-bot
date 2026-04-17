@@ -107,15 +107,51 @@ setInterval(async () => {
 
             // BUY logic
             if (signal.type === "BUY") {
-                if (price <= signal.sl) signal.status = "SL HIT ❌";
-                else if (price >= signal.tp1) signal.status = "TP HIT ✅";
-            }
+    if (price <= signal.sl) {
+        signal.status = "SL HIT ❌";
+
+        await sendMessage(VIP_CHAT_ID, `❌ SL HIT\n${signal.pair}`);
+    } 
+    else if (price >= signal.tp3) {
+        signal.status = "TP3 HIT 🎯🎯🎯";
+
+        await sendMessage(VIP_CHAT_ID, `🎯 TP3 HIT\n${signal.pair}`);
+    }
+    else if (price >= signal.tp2) {
+        signal.status = "TP2 HIT 🎯🎯";
+
+        await sendMessage(VIP_CHAT_ID, `🎯 TP2 HIT\n${signal.pair}`);
+    }
+    else if (price >= signal.tp1) {
+        signal.status = "TP1 HIT 🎯";
+
+        await sendMessage(VIP_CHAT_ID, `🎯 TP1 HIT\n${signal.pair}`);
+    }
+}
 
             // SELL logic
             if (signal.type === "SELL") {
-                if (price >= signal.sl) signal.status = "SL HIT ❌";
-                else if (price <= signal.tp1) signal.status = "TP HIT ✅";
-            }
+    if (price >= signal.sl) {
+        signal.status = "SL HIT ❌";
+
+        await sendMessage(VIP_CHAT_ID, `❌ SL HIT\n${signal.pair}`);
+    } 
+    else if (price <= signal.tp3) {
+        signal.status = "TP3 HIT 🎯🎯🎯";
+
+        await sendMessage(VIP_CHAT_ID, `🎯 TP3 HIT\n${signal.pair}`);
+    }
+    else if (price <= signal.tp2) {
+        signal.status = "TP2 HIT 🎯🎯";
+
+        await sendMessage(VIP_CHAT_ID, `🎯 TP2 HIT\n${signal.pair}`);
+    }
+    else if (price <= signal.tp1) {
+        signal.status = "TP1 HIT 🎯";
+
+        await sendMessage(VIP_CHAT_ID, `🎯 TP1 HIT\n${signal.pair}`);
+    }
+}
 
         } catch (e) {
             console.log("Price fetch error for:", signal.pair);
