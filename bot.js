@@ -1,3 +1,6 @@
+const VIP_CHAT_ID = -1003710328560;
+const ADMIN_ID = 1867730623; // 🔴 replace with your Telegram ID
+
 const Razorpay = require("razorpay");
 const fs = require("fs");
 
@@ -45,7 +48,6 @@ bot.on("message", async (msg) => {
 
     if (!text) return;
 
-    // STEP 1: PAID
     if (text.toLowerCase() === "paid") {
         bot.sendMessage(chatId, `
 ✅ Payment done!
@@ -55,20 +57,18 @@ Send your Payment ID (Example: RZP123456)
         return;
     }
 
-    // STEP 2: VERIFY PAYMENT
     if (text.startsWith("RZP")) {
         const paymentId = text.trim();
 
         try {
             const payment = await razorpay.payments.fetch(paymentId);
-			
-			// ===== PREVENT REUSE =====
-let usedPayments = JSON.parse(fs.readFileSync("usedPayments.json"));
 
-if (usedPayments.includes(paymentId)) {
-    bot.sendMessage(chatId, "❌ This payment ID is already used.");
-    return;
-}
+            // ===== PREVENT REUSE =====
+            let usedPayments = JSON.parse(fs.readFileSync("usedPayments.json"));
+            if (usedPayments.includes(paymentId)) {
+                bot.sendMessage(chatId, "❌ This payment ID is already used.");
+                return;
+            }
 
             if (payment.status !== "captured") {
                 bot.sendMessage(chatId, "❌ Payment not completed.");
@@ -80,27 +80,11 @@ if (usedPayments.includes(paymentId)) {
             let plan = "";
             let days = 0;
 
-            // ===== YOUR 5 PLANS =====
-            if (amount === 4000) {
-                plan = "MONTHLY";
-                days = 30;
-            } 
-            else if (amount === 6000) {
-                plan = "BIMONTHLY";
-                days = 60;
-            } 
-            else if (amount === 8000) {
-                plan = "QUARTERLY";
-                days = 90;
-            } 
-            else if (amount === 12000) {
-                plan = "HALF YEARLY";
-                days = 180;
-            } 
-            else if (amount === 20000) {
-                plan = "YEARLY";
-                days = 365;
-            } 
+            if (amount === 4000) { plan = "MONTHLY"; days = 30; }
+            else if (amount === 6000) { plan = "BIMONTHLY"; days = 60; }
+            else if (amount === 8000) { plan = "QUARTERLY"; days = 90; }
+            else if (amount === 12000) { plan = "HALF YEARLY"; days = 180; }
+            else if (amount === 20000) { plan = "YEARLY"; days = 365; }
             else {
                 bot.sendMessage(chatId, "❌ Payment amount not matching any plan.");
                 return;
@@ -118,10 +102,12 @@ if (usedPayments.includes(paymentId)) {
             });
 
             fs.writeFileSync("users.json", JSON.stringify(users, null, 2));
-			// Mark payment as used
-usedPayments.push(paymentId);
-fs.writeFileSync("usedPayments.json", JSON.stringify(usedPayments, null, 2));
 
+            // mark payment used
+            usedPayments.push(paymentId);
+            fs.writeFileSync("usedPayments.json", JSON.stringify(usedPayments, null, 2));
+
+            // ===== VIP MESSAGE WITH RENEW BUTTON =====
             bot.sendMessage(chatId, `
 🎉 VIP Access Activated!
 
@@ -130,11 +116,98 @@ fs.writeFileSync("usedPayments.json", JSON.stringify(usedPayments, null, 2));
 
 👉 Join VIP:
 https://t.me/+iIMQZ78tOEkxYTY1
-`);
+`, {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: "🔁 Renew Plan", url: "https://rzp.io/rzp/Y25xVBG0" }]
+                    ]
+                }
+            });
+
+            // ===== AUTO ONBOARDING =====
+            setTimeout(() => {
+                bot.sendMessage(chatId, `
+📊 <b>How to Use Signals:</b>
+
+1️⃣ Follow Entry Price  
+2️⃣ Book profit at TP levels  
+3️⃣ Always use SL  
+
+⚡ Use proper risk management
+
+🔥 Let’s make profits!
+`, { parse_mode: "HTML" });
+            }, 5000);
 
         } catch (err) {
             console.log(err);
             bot.sendMessage(chatId, "❌ Invalid Payment ID or not found.");
         }
     }
+});
+
+// ===== AUTO REMOVE EXPIRED USERS =====
+setInterval(async () => {
+    try {
+        let users = JSON.parse(fs.readFileSync("users.json"));
+
+        const now = new Date();
+        let updatedUsers = [];
+
+        for (let user of users) {
+            if (new Date(user.expiry) < now) {
+                try {
+                    await bot.banChatMember(VIP_CHAT_ID, user.chatId);
+                    await bot.unbanChatMember(VIP_CHAT_ID, user.chatId);
+                } catch (err) {}
+            } else {
+                updatedUsers.push(user);
+            }
+        }
+
+        fs.writeFileSync("users.json", JSON.stringify(updatedUsers, null, 2));
+
+    } catch (err) {
+        console.log("Expiry check error:", err.message);
+    }
+}, 60 * 60 * 1000);
+
+// ===== EXPIRY REMINDER =====
+setInterval(async () => {
+    try {
+        let users = JSON.parse(fs.readFileSync("users.json"));
+        const now = new Date();
+
+        for (let user of users) {
+            const expiry = new Date(user.expiry);
+            const diff = expiry - now;
+
+            if (diff > 0 && diff < (24 * 60 * 60 * 1000)) {
+                await bot.sendMessage(user.chatId, `
+⏰ <b>Your VIP Plan is Expiring Soon!</b>
+
+📅 Expiry: ${expiry.toDateString()}
+
+🔥 Renew now:
+https://rzp.io/rzp/Y25xVBG0
+`, { parse_mode: "HTML" });
+            }
+        }
+
+    } catch (err) {
+        console.log("Reminder error:", err.message);
+    }
+}, 6 * 60 * 60 * 1000);
+
+// ===== ADMIN DASHBOARD =====
+bot.onText(/\/stats/, (msg) => {
+    if (msg.chat.id !== ADMIN_ID) return;
+
+    let users = JSON.parse(fs.readFileSync("users.json"));
+
+    bot.sendMessage(msg.chat.id, `
+📊 <b>AI Forex Pro Stats</b>
+
+👥 Total Users: ${users.length}
+`, { parse_mode: "HTML" });
 });
