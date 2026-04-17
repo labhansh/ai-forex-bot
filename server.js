@@ -17,37 +17,11 @@ if (!fs.existsSync(DB_FILE)) {
     fs.writeFileSync(DB_FILE, "[]");
 }
 
-// ===== FREE LIMIT TRACKING =====
+// ===== FREE LIMIT =====
 let freeSignalsCount = 0;
 let currentDate = new Date().toDateString();
 
-// ===== FORMAT MESSAGE =====
-function formatMessage(data) {
-    return `
-🚀 <b>AI FOREX PRO VIP SIGNAL</b>
-
-━━━━━━━━━━━━━━━
-
-📊 <b>Pair:</b> ${data.pair || "-"}
-⏱ <b>Timeframe:</b> ${data.timeframe || "-"}
-
-📈 <b>Type:</b> ${data.type || "-"}
-
-💰 <b>Entry:</b> ${data.entry || "-"}
-🛑 <b>Stop Loss:</b> ${data.sl || "-"}
-
-🎯 <b>TP1:</b> ${data.tp1 || "-"}
-🎯 <b>TP2:</b> ${data.tp2 || "-"}
-🎯 <b>TP3:</b> ${data.tp3 || "-"}
-
-🆔 <b>ID:</b> ${data.id}
-
-━━━━━━━━━━━━━━━
-⚡ Powered by AI Forex Pro
-`;
-}
-
-// ===== SEND =====
+// ===== SEND TELEGRAM =====
 async function sendMessage(chatId, text) {
     await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
         chat_id: chatId,
@@ -56,45 +30,149 @@ async function sendMessage(chatId, text) {
     });
 }
 
+// ===== FORMAT MESSAGE =====
+function formatMessage(data) {
+    return `
+🚀 <b>AI FOREX PRO VIP SIGNAL</b>
+
+📊 ${data.pair}
+📈 ${data.type}
+
+💰 Entry: ${data.entry}
+🛑 SL: ${data.sl}
+
+🎯 TP1: ${data.tp1}
+🎯 TP2: ${data.tp2}
+🎯 TP3: ${data.tp3}
+
+🆔 ${data.id}
+`;
+}
+
+// ===== TRAILING SL + PARTIAL BOOKING =====
+function checkTPHits(signal, price) {
+    let updates = [];
+
+    if (signal.type === "BUY") {
+
+        if (!signal.tp1Hit && price >= signal.tp1) {
+            signal.tp1Hit = true;
+            signal.trailSL = signal.entry;
+            signal.partial1Done = true;
+
+            updates.push("TP1 HIT");
+            updates.push("🔒 SL moved to Entry");
+        }
+
+        if (!signal.tp2Hit && price >= signal.tp2) {
+            signal.tp2Hit = true;
+            signal.trailSL = signal.tp1;
+            signal.partial2Done = true;
+
+            updates.push("TP2 HIT");
+            updates.push("🔒 SL moved to TP1");
+        }
+
+        if (!signal.tp3Hit && price >= signal.tp3) {
+            signal.tp3Hit = true;
+            signal.status = "CLOSED";
+
+            updates.push("🏆 TP3 HIT (TRADE CLOSED)");
+        }
+
+        if (price <= (signal.trailSL || signal.sl) && signal.status !== "CLOSED") {
+            signal.status = "CLOSED";
+            updates.push("❌ TRAIL SL HIT");
+        }
+    }
+
+    if (signal.type === "SELL") {
+
+        if (!signal.tp1Hit && price <= signal.tp1) {
+            signal.tp1Hit = true;
+            signal.trailSL = signal.entry;
+            signal.partial1Done = true;
+
+            updates.push("TP1 HIT");
+            updates.push("🔒 SL moved to Entry");
+        }
+
+        if (!signal.tp2Hit && price <= signal.tp2) {
+            signal.tp2Hit = true;
+            signal.trailSL = signal.tp1;
+            signal.partial2Done = true;
+
+            updates.push("TP2 HIT");
+            updates.push("🔒 SL moved to TP1");
+        }
+
+        if (!signal.tp3Hit && price <= signal.tp3) {
+            signal.tp3Hit = true;
+            signal.status = "CLOSED";
+
+            updates.push("🏆 TP3 HIT (TRADE CLOSED)");
+        }
+
+        if (price >= (signal.trailSL || signal.sl) && signal.status !== "CLOSED") {
+            signal.status = "CLOSED";
+            updates.push("❌ TRAIL SL HIT");
+        }
+    }
+
+    return updates;
+}
+
+// ===== PRICE API =====
+async function getLivePrice(symbol) {
+    try {
+        const res = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
+        return parseFloat(res.data.price);
+    } catch {
+        return null;
+    }
+}
+
+function convertPair(pair) {
+    return pair.replace("USD", "USDT");
+}
+
 // ===== WEBHOOK =====
 app.post("/webhook", async (req, res) => {
     try {
         const data = req.body;
-
         let signals = JSON.parse(fs.readFileSync(DB_FILE));
 
-        // =============================
-        // ===== ENTRY SIGNAL =====
-        // =============================
         if (data.event === "ENTRY") {
 
-            // use TradingView ID (IMPORTANT)
-            const signalId = data.id;
-
             const signal = {
-                id: signalId,
+                id: data.id,
                 pair: data.pair,
                 type: data.type,
-                entry: data.entry,
-                sl: data.sl,
-                tp1: data.tp1,
-                tp2: data.tp2,
-                tp3: data.tp3,
+                entry: parseFloat(data.entry),
+                sl: parseFloat(data.sl),
+                tp1: parseFloat(data.tp1),
+                tp2: parseFloat(data.tp2),
+                tp3: parseFloat(data.tp3),
+
                 tp1Hit: false,
                 tp2Hit: false,
                 tp3Hit: false,
-                status: "OPEN",
-                createdAt: new Date()
+
+                // ✅ NEW FEATURES
+                trailSL: null,
+                partial1Done: false,
+                partial2Done: false,
+
+                status: "OPEN"
             };
 
             signals.push(signal);
             fs.writeFileSync(DB_FILE, JSON.stringify(signals, null, 2));
 
             const message = formatMessage(signal);
-
             await sendMessage(VIP_CHAT_ID, message);
 
-            // ===== FREE LIMIT =====
+            // FREE GROUP
             const today = new Date().toDateString();
             if (today !== currentDate) {
                 currentDate = today;
@@ -112,75 +190,7 @@ app.post("/webhook", async (req, res) => {
             return res.send("ENTRY OK");
         }
 
-        // =============================
-        // ===== FIND SIGNAL =====
-        // =============================
-        const signal = signals.find(s => s.id == data.id);
-
-        if (!signal) {
-            return res.send("Signal not found");
-        }
-
-        // =============================
-        // ===== TP1 =====
-        // =============================
-        if (data.event === "TP1" && !signal.tp1Hit) {
-            signal.tp1Hit = true;
-
-            await sendMessage(VIP_CHAT_ID, `
-🎯 <b>TP1 HIT</b>
-
-📊 ${signal.pair}
-🆔 ${signal.id}
-`);
-        }
-
-        // =============================
-        // ===== TP2 =====
-        // =============================
-        if (data.event === "TP2" && !signal.tp2Hit) {
-            signal.tp2Hit = true;
-
-            await sendMessage(VIP_CHAT_ID, `
-🎯 <b>TP2 HIT</b>
-
-📊 ${signal.pair}
-🆔 ${signal.id}
-`);
-        }
-
-        // =============================
-        // ===== TP3 =====
-        // =============================
-        if (data.event === "TP3" && !signal.tp3Hit) {
-            signal.tp3Hit = true;
-            signal.status = "CLOSED";
-
-            await sendMessage(VIP_CHAT_ID, `
-🏆 <b>TP3 HIT - TRADE CLOSED</b>
-
-📊 ${signal.pair}
-🆔 ${signal.id}
-`);
-        }
-
-        // =============================
-        // ===== SL =====
-        // =============================
-        if (data.event === "SL" && signal.status !== "CLOSED") {
-            signal.status = "CLOSED";
-
-            await sendMessage(VIP_CHAT_ID, `
-❌ <b>STOP LOSS HIT</b>
-
-📊 ${signal.pair}
-🆔 ${signal.id}
-`);
-        }
-
-        fs.writeFileSync(DB_FILE, JSON.stringify(signals, null, 2));
-
-        res.send("UPDATED");
+        res.send("NO ACTION");
 
     } catch (err) {
         console.log(err);
@@ -188,13 +198,37 @@ app.post("/webhook", async (req, res) => {
     }
 });
 
-// ===== HISTORY =====
-app.get("/signals", (req, res) => {
-    const signals = JSON.parse(fs.readFileSync(DB_FILE));
-    res.json(signals);
-});
+// ===== REAL-TIME ENGINE =====
+setInterval(async () => {
+    let signals = JSON.parse(fs.readFileSync(DB_FILE));
+
+    for (let signal of signals) {
+
+        if (signal.status !== "OPEN") continue;
+
+        const symbol = convertPair(signal.pair);
+        const price = await getLivePrice(symbol);
+
+        if (!price) continue;
+
+        const hits = checkTPHits(signal, price);
+
+        for (let hit of hits) {
+            await sendMessage(VIP_CHAT_ID, `
+${hit}
+
+📊 ${signal.pair}
+💰 Price: ${price}
+🆔 ${signal.id}
+`);
+        }
+    }
+
+    fs.writeFileSync(DB_FILE, JSON.stringify(signals, null, 2));
+
+}, 5000);
 
 // ===== START =====
 app.listen(3000, () => {
-    console.log("Server running on port 3000");
+    console.log("🚀 Server running on port 3000");
 });
