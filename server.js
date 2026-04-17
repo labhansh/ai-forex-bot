@@ -56,7 +56,23 @@ app.post("/webhook", async (req, res) => {
     try {
         const data = req.body;
 
-        const message = formatMessage(data);
+        let message = "";
+
+if (data.event === "ENTRY") {
+    message = formatMessage(data);
+}
+else if (data.event === "TP1") {
+    message = `🎯 TP1 HIT\n${data.pair}`;
+}
+else if (data.event === "TP2") {
+    message = `🎯 TP2 HIT\n${data.pair}`;
+}
+else if (data.event === "TP3") {
+    message = `🚀 TP3 HIT (FULL TARGET)\n${data.pair}`;
+}
+else if (data.event === "SL") {
+    message = `❌ STOP LOSS HIT\n${data.pair}`;
+}
 
         // ===== SAVE SIGNAL =====
         const signal = {
@@ -94,20 +110,6 @@ app.post("/webhook", async (req, res) => {
         res.status(500).send("Error");
     }
 });
-
-// ===== TRACKING ENGINE =====
-setInterval(async () => {
-    let signals = JSON.parse(fs.readFileSync(DB_FILE));
-
-    for (let signal of signals) {
-        if (signal.status !== "OPEN") continue;
-
-        try {
-            // ⚠️ Basic price fetch (works best for crypto pairs)
-            const symbol = signal.pair.replace("/", "").toUpperCase();
-
-            const res = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
-            const price = parseFloat(res.data.price);
 
             // BUY logic
           if (signal.type === "BUY") {
