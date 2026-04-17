@@ -61,6 +61,14 @@ Send your Payment ID (Example: RZP123456)
 
         try {
             const payment = await razorpay.payments.fetch(paymentId);
+			
+			// ===== PREVENT REUSE =====
+let usedPayments = JSON.parse(fs.readFileSync("usedPayments.json"));
+
+if (usedPayments.includes(paymentId)) {
+    bot.sendMessage(chatId, "❌ This payment ID is already used.");
+    return;
+}
 
             if (payment.status !== "captured") {
                 bot.sendMessage(chatId, "❌ Payment not completed.");
@@ -110,6 +118,9 @@ Send your Payment ID (Example: RZP123456)
             });
 
             fs.writeFileSync("users.json", JSON.stringify(users, null, 2));
+			// Mark payment as used
+usedPayments.push(paymentId);
+fs.writeFileSync("usedPayments.json", JSON.stringify(usedPayments, null, 2));
 
             bot.sendMessage(chatId, `
 🎉 VIP Access Activated!
