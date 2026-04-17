@@ -1,5 +1,6 @@
 const express = require("express");
 const axios = require("axios");
+const fs = require("fs");
 
 const app = express();
 app.use(express.json());
@@ -8,6 +9,14 @@ app.use(express.json());
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const VIP_CHAT_ID = process.env.VIP_CHAT_ID;
 const FREE_CHAT_ID = process.env.FREE_CHAT_ID;
+
+// ===== FILE PATH =====
+const DB_FILE = "signals.json";
+
+// ===== INIT FILE IF NOT EXISTS =====
+if (!fs.existsSync(DB_FILE)) {
+    fs.writeFileSync(DB_FILE, "[]");
+}
 
 // ===== FORMAT MESSAGE =====
 function formatMessage(data) {
@@ -49,20 +58,78 @@ app.post("/webhook", async (req, res) => {
 
         const message = formatMessage(data);
 
-        // VIP instant
+        // ===== SAVE SIGNAL =====
+        const signal = {
+            id: Date.now(),
+            pair: data.pair,
+            type: data.type,
+            entry: parseFloat(data.entry),
+            sl: parseFloat(data.sl),
+            tp1: parseFloat(data.tp1),
+            tp2: parseFloat(data.tp2),
+            tp3: parseFloat(data.tp3),
+            status: "OPEN",
+            createdAt: new Date()
+        };
+
+        let signals = JSON.parse(fs.readFileSync(DB_FILE));
+        signals.push(signal);
+        fs.writeFileSync(DB_FILE, JSON.stringify(signals, null, 2));
+
+        // ===== SEND TELEGRAM =====
         await sendMessage(VIP_CHAT_ID, message);
 
-        // FREE delayed
         setTimeout(() => {
             sendMessage(FREE_CHAT_ID, message);
         }, 15 * 60 * 1000);
 
-        res.send("Signal sent");
+        res.send("Signal stored & sent");
 
     } catch (error) {
         console.log(error);
         res.status(500).send("Error");
     }
+});
+
+// ===== TRACKING ENGINE =====
+setInterval(async () => {
+    let signals = JSON.parse(fs.readFileSync(DB_FILE));
+
+    for (let signal of signals) {
+        if (signal.status !== "OPEN") continue;
+
+        try {
+            // ⚠️ Basic price fetch (works best for crypto pairs)
+            const symbol = signal.pair.replace("/", "").toUpperCase();
+
+            const res = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
+            const price = parseFloat(res.data.price);
+
+            // BUY logic
+            if (signal.type === "BUY") {
+                if (price <= signal.sl) signal.status = "SL HIT ❌";
+                else if (price >= signal.tp1) signal.status = "TP HIT ✅";
+            }
+
+            // SELL logic
+            if (signal.type === "SELL") {
+                if (price >= signal.sl) signal.status = "SL HIT ❌";
+                else if (price <= signal.tp1) signal.status = "TP HIT ✅";
+            }
+
+        } catch (e) {
+            console.log("Price fetch error for:", signal.pair);
+        }
+    }
+
+    fs.writeFileSync(DB_FILE, JSON.stringify(signals, null, 2));
+
+}, 10000); // every 10 sec
+
+// ===== HISTORY API =====
+app.get("/signals", (req, res) => {
+    const signals = JSON.parse(fs.readFileSync(DB_FILE));
+    res.json(signals);
 });
 
 // ===== START SERVER =====
