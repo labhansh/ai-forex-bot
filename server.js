@@ -69,6 +69,10 @@ app.post("/webhook", async (req, res) => {
             tp2: parseFloat(data.tp2),
             tp3: parseFloat(data.tp3),
             status: "OPEN",
+			tp1Hit: false,
+			tp2Hit: false,
+			tp3Hit: false,
+			slHit: false,
             createdAt: new Date()
         };
 
@@ -106,50 +110,62 @@ setInterval(async () => {
             const price = parseFloat(res.data.price);
 
             // BUY logic
-            if (signal.type === "BUY") {
-    if (price <= signal.sl) {
+          if (signal.type === "BUY") {
+
+    if (!signal.slHit && price <= signal.sl) {
         signal.status = "SL HIT ❌";
+        signal.slHit = true;
 
         await sendMessage(VIP_CHAT_ID, `❌ SL HIT\n${signal.pair}`);
-    } 
-    else if (price >= signal.tp3) {
-        signal.status = "TP3 HIT 🎯🎯🎯";
-
-        await sendMessage(VIP_CHAT_ID, `🎯 TP3 HIT\n${signal.pair}`);
     }
-    else if (price >= signal.tp2) {
-        signal.status = "TP2 HIT 🎯🎯";
+
+    if (!signal.tp1Hit && price >= signal.tp1) {
+        signal.tp1Hit = true;
+
+        await sendMessage(VIP_CHAT_ID, `🎯 TP1 HIT\n${signal.pair}`);
+    }
+
+    if (!signal.tp2Hit && price >= signal.tp2) {
+        signal.tp2Hit = true;
 
         await sendMessage(VIP_CHAT_ID, `🎯 TP2 HIT\n${signal.pair}`);
     }
-    else if (price >= signal.tp1) {
-        signal.status = "TP1 HIT 🎯";
 
-        await sendMessage(VIP_CHAT_ID, `🎯 TP1 HIT\n${signal.pair}`);
+    if (!signal.tp3Hit && price >= signal.tp3) {
+        signal.tp3Hit = true;
+        signal.status = "TP3 HIT 🎯🎯🎯";
+
+        await sendMessage(VIP_CHAT_ID, `🎯 TP3 HIT\n${signal.pair}`);
     }
 }
 
             // SELL logic
-            if (signal.type === "SELL") {
-    if (price >= signal.sl) {
+           if (signal.type === "SELL") {
+
+    if (!signal.slHit && price >= signal.sl) {
         signal.status = "SL HIT ❌";
+        signal.slHit = true;
 
         await sendMessage(VIP_CHAT_ID, `❌ SL HIT\n${signal.pair}`);
-    } 
-    else if (price <= signal.tp3) {
-        signal.status = "TP3 HIT 🎯🎯🎯";
-
-        await sendMessage(VIP_CHAT_ID, `🎯 TP3 HIT\n${signal.pair}`);
     }
-    else if (price <= signal.tp2) {
-        signal.status = "TP2 HIT 🎯🎯";
+
+    if (!signal.tp1Hit && price <= signal.tp1) {
+        signal.tp1Hit = true;
+
+        await sendMessage(VIP_CHAT_ID, `🎯 TP1 HIT\n${signal.pair}`);
+    }
+
+    if (!signal.tp2Hit && price <= signal.tp2) {
+        signal.tp2Hit = true;
 
         await sendMessage(VIP_CHAT_ID, `🎯 TP2 HIT\n${signal.pair}`);
     }
-    else if (price <= signal.tp1) {
-        signal.status = "TP1 HIT 🎯";
 
-        await sendMessage(VIP_CHAT_ID, `🎯 TP1 HIT\n${signal.pair}`);
+    if (!signal.tp3Hit && price <= signal.tp3) {
+        signal.tp3Hit = true;
+        signal.status = "TP3 HIT 🎯🎯🎯";
+
+        await sendMessage(VIP_CHAT_ID, `🎯 TP3 HIT\n${signal.pair}`);
     }
 }
 
