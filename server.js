@@ -5,10 +5,20 @@ const fs = require("fs");
 const app = express();
 app.use(express.json());
 
+// ===== GLOBAL ERROR HANDLER =====
+process.on("uncaughtException", (err) => {
+    console.error("Uncaught Exception:", err);
+});
+
+process.on("unhandledRejection", (err) => {
+    console.error("Unhandled Rejection:", err);
+});
+
 // ===== CONFIG =====
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const VIP_CHAT_ID = process.env.VIP_CHAT_ID;
 const FREE_CHAT_ID = process.env.FREE_CHAT_ID;
+const ADMIN_ID = process.env.ADMIN_CHAT_ID;
 
 // ===== FILE =====
 const DB_FILE = "signals.json";
@@ -21,16 +31,35 @@ if (!fs.existsSync(DB_FILE)) {
 let freeSignalsCount = 0;
 let currentDate = new Date().toDateString();
 
-// ===== SEND TELEGRAM =====
-async function sendMessage(chatId, text) {
-    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-        chat_id: chatId,
-        text: text,
-        parse_mode: "HTML"
-    });
+// ===== ADMIN ALERT =====
+async function sendAdminAlert(message) {
+    if (!ADMIN_ID) return;
+
+    try {
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: ADMIN_ID,
+            text: "🚨 SYSTEM ALERT\n\n" + message
+        });
+    } catch (err) {
+        console.log("Admin alert failed:", err.message);
+    }
 }
 
-// ===== PREMIUM FORMAT MESSAGE =====
+// ===== SAFE TELEGRAM SEND =====
+async function sendMessage(chatId, text) {
+    try {
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: text,
+            parse_mode: "HTML"
+        });
+    } catch (err) {
+        console.log("Telegram Error:", err.message);
+        await sendAdminAlert("Telegram Error: " + err.message);
+    }
+}
+
+// ===== PREMIUM FORMAT =====
 function formatMessage(data) {
     return `
 🚀 <b>AI FOREX PRO VIP SIGNAL</b>
@@ -53,12 +82,11 @@ TP3 → ${data.tp3}
 `;
 }
 
-// ===== TRAILING SL + PARTIAL BOOKING =====
+// ===== TP + TRAILING =====
 function checkTPHits(signal, price) {
     let updates = [];
 
     if (signal.type === "BUY") {
-
         if (!signal.tp1Hit && price >= signal.tp1) {
             signal.tp1Hit = true;
             signal.trailSL = signal.entry;
@@ -105,7 +133,6 @@ function checkTPHits(signal, price) {
     }
 
     if (signal.type === "SELL") {
-
         if (!signal.tp1Hit && price <= signal.tp1) {
             signal.tp1Hit = true;
             signal.trailSL = signal.entry;
@@ -154,7 +181,7 @@ function checkTPHits(signal, price) {
     return updates;
 }
 
-// ===== PRICE API =====
+// ===== PRICE =====
 async function getLivePrice(symbol) {
     try {
         const res = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
@@ -194,14 +221,14 @@ app.post("/webhook", async (req, res) => {
                 partial1Done: false,
                 partial2Done: false,
 
-                status: "OPEN"
+                status: "OPEN",
+                createdAt: new Date()
             };
 
             signals.push(signal);
             fs.writeFileSync(DB_FILE, JSON.stringify(signals, null, 2));
 
-            const message = formatMessage(signal);
-            await sendMessage(VIP_CHAT_ID, message);
+            await sendMessage(VIP_CHAT_ID, formatMessage(signal));
 
             return res.send("ENTRY OK");
         }
@@ -210,8 +237,18 @@ app.post("/webhook", async (req, res) => {
 
     } catch (err) {
         console.log(err);
+        await sendAdminAlert(err.message);
         res.status(500).send("Error");
     }
+});
+
+// ===== HEALTH CHECK =====
+app.get("/health", (req, res) => {
+    res.json({
+        status: "OK",
+        time: new Date(),
+        uptime: process.uptime()
+    });
 });
 
 // ===== REAL-TIME ENGINE =====
@@ -219,12 +256,9 @@ setInterval(async () => {
     let signals = JSON.parse(fs.readFileSync(DB_FILE));
 
     for (let signal of signals) {
-
         if (signal.status !== "OPEN") continue;
 
-        const symbol = convertPair(signal.pair);
-        const price = await getLivePrice(symbol);
-
+        const price = await getLivePrice(convertPair(signal.pair));
         if (!price) continue;
 
         const hits = checkTPHits(signal, price);
@@ -243,7 +277,22 @@ setInterval(async () => {
 
 }, 5000);
 
+// ===== AUTO CLEAN =====
+setInterval(() => {
+    let signals = JSON.parse(fs.readFileSync(DB_FILE));
+
+    const now = Date.now();
+
+    signals = signals.filter(s => {
+        return now - new Date(s.createdAt).getTime() < 24 * 60 * 60 * 1000;
+    });
+
+    fs.writeFileSync(DB_FILE, JSON.stringify(signals, null, 2));
+
+}, 60 * 60 * 1000);
+
 // ===== START =====
-app.listen(3000, () => {
+app.listen(3000, async () => {
     console.log("🚀 Server running on port 3000");
+    await sendAdminAlert("✅ Server Started Successfully");
 });
